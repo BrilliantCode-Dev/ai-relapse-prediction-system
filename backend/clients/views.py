@@ -131,11 +131,11 @@ class DailyCheckInCreateView(generics.CreateAPIView):
             client=client,
             risk_level=result["risk"],
             risk_score=result["risk_score"],
-            risk_reasons=result["reasons"]
+            risk_reasons = result.get("reasons", [])
         )
 
-        # 🚨 ONLY create alert if high risk
-        if result["risk"] == "High Risk":
+        # 🚨 CREATE ALERT
+        if result["risk_score"] >= 5:
             caregivers = client.caregivers.all()
 
             for caregiver in caregivers:
@@ -144,8 +144,8 @@ class DailyCheckInCreateView(generics.CreateAPIView):
                     caregiver=caregiver,
                     risk_score=result["risk_score"],
                     risk_level=result["risk"],
-                    prediction=result["prediction_text"],
-                    reasons=result["reasons"],
+                    prediction=f"AI predicted {result['risk']}",
+                    reasons=result.get("reasons", []),
                     checkin=checkin
                 )
 
