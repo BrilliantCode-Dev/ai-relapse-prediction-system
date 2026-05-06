@@ -109,52 +109,49 @@ class DailyCheckInCreateView(generics.CreateAPIView):
     serializer_class = DailyCheckInSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def perform_create(self, serializer):
-        user = self.request.user
-        
+    def create(self, request, *args, **kwargs):
+        user = request.user
+
         try:
             client = Client.objects.get(user=user)
         except Client.DoesNotExist:
-            raise serializers.ValidationError("Client profile not found")
+            return Response({"error": "Client not found"}, status=400)
 
-        # 🔥 GET REQUEST DATA
-        data = self.request.data.copy()
+        data = request.data.copy()
 
-        # 🔥 RUN AI MODEL
-        risk, reasons = predict_risk(data)
+        # 🔥 RUN MODEL
+        result = predict_risk(data)
 
-        # ✅ DEFINE VARIABLES FIRST
-        risk_level = risk
-        risk_score = data.get("risk_score", 0)
+        print("🔥 MODEL RESULT:", result)
 
-        # ✅ NOW you can print
-        print("🔥 RISK LEVEL:", risk_level)
-        print("🔥 REASONS:", reasons)
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
 
-        # 🔥 SAVE CHECK-IN
         checkin = serializer.save(
             client=client,
-            risk_level=risk_level,
-            risk_score=risk_score,
-            risk_reasons=reasons
+            risk_level=result["risk"],
+            risk_score=result["risk_score"],
+            risk_reasons=result["reasons"]
         )
 
-        # 🔥 CREATE ALERTS
-        if True:
+        # 🚨 ONLY create alert if high risk
+        if result["risk"] == "High Risk":
             caregivers = client.caregivers.all()
 
             for caregiver in caregivers:
                 Alert.objects.create(
                     client=client,
                     caregiver=caregiver,
-                    risk_score=risk_score,
-                    risk_level=risk_level,
-                    prediction="High risk of relapse",
-                    reasons=reasons,
+                    risk_score=result["risk_score"],
+                    risk_level=result["risk"],
+                    prediction=result["prediction_text"],
+                    reasons=result["reasons"],
                     checkin=checkin
                 )
 
-        
+        # ✅ SEND RESPONSE BACK TO FRONTEND
+        return Response(result, status=201)
+            
 class DailyCheckInListView(generics.ListAPIView):
     serializer_class = DailyCheckInSerializer
     permission_classes = [permissions.IsAuthenticated]
