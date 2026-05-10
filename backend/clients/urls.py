@@ -6,6 +6,7 @@ from .views import AssignCaregiverView
 from .views import MyPatientsView
 from .views import AlertsView
 from .views import chat
+from .views import AIAlertsView
 
 urlpatterns = [
     # For listing all clients (GET) and creating new clients (POST)
@@ -20,4 +21,5 @@ urlpatterns = [
     path("my-patients/", MyPatientsView.as_view()),
     path("alerts/", AlertsView.as_view(), name="alerts"),
     path("chat/", chat),
+    path("ai-alerts/", AIAlertsView.as_view()),
 ]

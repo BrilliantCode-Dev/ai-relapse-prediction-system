@@ -57,10 +57,21 @@ class DailyCheckInSerializer(serializers.ModelSerializer):
         read_only_fields = ["client", "created_at"]
 
 class JournalEntrySerializer(serializers.ModelSerializer):
+
     class Meta:
         model = JournalEntry
-        fields = "__all__"
-        read_only_fields = ["user", "created_at"]
 
+        fields = "__all__"
+
+        read_only_fields = [
+            "client",
+            "ai_prediction",
+            "risk_level",
+            "confidence_score",
+            "distress_keywords",
+            "ai_reasons",
+            "alert_triggered",
+            "created_at",
+        ]
 
 

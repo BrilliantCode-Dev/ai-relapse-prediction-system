@@ -168,15 +168,55 @@ class DailyCheckIn(models.Model):
 User = settings.AUTH_USER_MODEL
 
 class JournalEntry(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="journal_entries")
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name="journal_entries"
+    )
+
+    # 📝 Journal text
     entry = models.TextField()
-    tags = models.JSONField(default=list, blank=True)  # stores ["Happy", "Anxious"]
+
+    # 🏷️ Tags
+    tags = models.JSONField(default=list, blank=True)
+
+    # 🤖 AI Analysis
+    ai_prediction = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True
+    )
+
+    risk_level = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True
+    )
+
+    confidence_score = models.FloatField(
+        null=True,
+        blank=True
+    )
+
+    distress_keywords = models.JSONField(
+        default=list,
+        blank=True
+    )
+
+    ai_reasons = models.JSONField(
+        default=list,
+        blank=True
+    )
+
+    alert_triggered = models.BooleanField(default=False)
+
+    # 📅 Date
     date = models.DateTimeField()
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user} - {self.date}"
-
+        return f"{self.client.fullName} - {self.date}"
 
 
 class Alert(models.Model):
@@ -212,3 +252,110 @@ class Alert(models.Model):
 
     def __str__(self):
         return f"{self.client.fullName} - {self.risk_level}"
+
+class ChatConversation(models.Model):
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name="conversations"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.client.fullName} Conversation"
+
+
+class ChatMessage(models.Model):
+    conversation = models.ForeignKey(
+        ChatConversation,
+        on_delete=models.CASCADE,
+        related_name="messages"
+    )
+
+    sender = models.CharField(max_length=10)
+    # "user" or "bot"
+
+    message = models.TextField()
+
+    risk_score = models.FloatField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.sender}: {self.message[:30]}"
+
+class AIAlert(models.Model):
+
+    ALERT_TYPES = [
+        ("Emotional Distress", "Emotional Distress"),
+        ("Relapse Warning", "Relapse Warning"),
+        ("Suicidal Warning", "Suicidal Warning"),
+    ]
+
+    TRIGGER_SOURCES = [
+        ("Chatbot", "Chatbot"),
+        ("Journal", "Journal"),
+    ]
+
+    # 👤 Patient
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name="ai_alerts"
+    )
+
+    # 👨‍⚕️ Caregiver / Social Worker
+    caregiver = models.ForeignKey(
+        "staff.StaffProfile",
+        on_delete=models.CASCADE,
+        related_name="ai_alerts"
+    )
+
+    # 📊 Risk Details
+    risk_level = models.CharField(max_length=20)
+
+    risk_score = models.FloatField()
+
+    # 🚨 Alert Metadata
+    alert_type = models.CharField(
+        max_length=50,
+        choices=ALERT_TYPES
+    )
+
+    trigger_source = models.CharField(
+        max_length=50,
+        choices=TRIGGER_SOURCES
+    )
+
+    # 🤖 AI Output
+    prediction = models.TextField()
+
+    message = models.TextField()
+
+    reasons = models.JSONField(
+        default=list,
+        blank=True
+    )
+
+    # 🔗 Optional Links
+    journal_entry = models.ForeignKey(
+        JournalEntry,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+
+    chat_message = models.ForeignKey(
+        ChatMessage,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+
+    # 📅 Timestamp
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.client.fullName} - {self.trigger_source}"
+

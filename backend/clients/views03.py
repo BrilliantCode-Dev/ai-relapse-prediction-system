@@ -13,16 +13,12 @@ from .serializers import JournalEntrySerializer
 from rest_framework import serializers  # add this at top if missing
 from .utils import predict_risk
 from staff.models import StaffProfile
-from .models import Alert, AIAlert
+from .models import Alert
 from rest_framework.response import Response
 from django.conf import settings
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from google import genai
-from .models import ChatConversation, ChatMessage
-from .ml_chat_risk import predict_chat_risk
-from django.utils import timezone
-
 
 gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
@@ -165,113 +161,14 @@ class DailyCheckInListView(generics.ListAPIView):
         return DailyCheckIn.objects.filter(client__user=user).order_by("-date")
     
 class JournalEntryCreateView(generics.ListCreateAPIView):
-
     serializer_class = JournalEntrySerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return JournalEntry.objects.filter(
-            client__user=self.request.user
-        ).order_by("-created_at")
+        return JournalEntry.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-
-        user = self.request.user
-
-        try:
-            client = Client.objects.get(user=user)
-
-        except Client.DoesNotExist:
-            raise serializers.ValidationError(
-                {"error": "Client not found"}
-            )
-
-        entry_text = self.request.data.get("entry", "")
-
-        # =========================
-        # RUN AI MODEL
-        # =========================
-
-        risk_result = predict_chat_risk(entry_text)
-        print("JOURNAL AI RESULT:", risk_result)
-
-        prediction = risk_result["prediction"]
-
-        confidence = risk_result["confidence"]
-
-        # =========================
-        # DETERMINE RISK
-        # =========================
-
-        prediction_text = str(prediction).lower()
-
-        if "high" in prediction_text:
-            risk_level = "HIGH"
-
-        elif "moderate" in prediction_text or "medium" in prediction_text:
-            risk_level = "MODERATE"
-
-        else:
-            risk_level = "LOW"
-            
-        print("FINAL RISK LEVEL:", risk_level)
-
-        # =========================
-        # SAVE JOURNAL ENTRY
-        # =========================
-
-        journal = serializer.save(
-
-        client=client,
-
-        date=timezone.now(),
-
-        ai_prediction=prediction,
-
-        risk_level=risk_level,
-
-        confidence_score=confidence,
-
-        ai_reasons=[
-            f"AI detected emotional distress with confidence {confidence}"
-        ]
-    )
-
-        # =========================
-        # CREATE AI ALERT
-        # =========================
-        caregivers = client.caregivers.all()
-
-        for caregiver in caregivers:
-
-            AIAlert.objects.create(
-                client=client,
-
-                caregiver=caregiver,
-
-                risk_level=risk_level,
-
-                risk_score=round(confidence * 10, 2),
-
-                alert_type="Emotional Distress",
-
-                trigger_source="Journal",
-
-                prediction=f"AI detected {risk_level} emotional distress",
-
-                message="Patient journal was analyzed by AI.",
-
-                reasons=[entry_text],
-
-                journal_entry=journal
-            )
-
-        journal.alert_triggered = True
-        journal.save()
-
-        print("AI ALERT CREATED:", risk_level)
-
-            
+        serializer.save(user=self.request.user)
 
 class AssignCaregiverView(APIView):
     permission_classes = [IsAuthenticated]
@@ -322,22 +219,13 @@ class AlertsView(APIView):
         data = []
         for alert in alerts:
             data.append({
-
+                
                 "patient_name": alert.client.fullName,
-
-                "risk_level": alert.risk_level,
-
                 "risk_score": alert.risk_score,
-
-                #"alert_type": getattr(alert, "alert_type", "CHAT"),
-
-                #"trigger_source": getattr(alert, "trigger_source", "AI_CHAT"),
-
-                "message": alert.prediction,
-
-                "created_at": alert.created_at,
-
+                "risk_level": alert.risk_level,
+                "prediction": alert.prediction,
                 "reasons": alert.reasons,
+                "created_at": alert.created_at,
             })
 
         return Response(data)
@@ -377,186 +265,67 @@ Rules:
 - If the user expresses distress, suggest contacting a social worker briefly
 """
 
+HIGH_RISK_WORDS = ["relapse", "craving", "using again", "can't stop"]
+
+def detect_risk(message):
+    message = message.lower()
+    return any(word in message for word in HIGH_RISK_WORDS)
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def chat(request):
-
     user_message = request.data.get("message")
 
     if not user_message:
-        return Response(
-            {"error": "Message is required"},
-            status=400
-        )
+        return Response({"error": "Message is required"}, status=400)
 
-    # =========================
-    # GET PATIENT
-    # =========================
+    # ✅ get patient
     try:
         patient = Client.objects.get(user=request.user)
-
     except Client.DoesNotExist:
-        return Response(
-            {"error": "Client not found"},
-            status=404
-        )
+        return Response({"error": "Client not found"}, status=404)
 
-    # =========================
-    # GET OR CREATE CONVERSATION
-    # =========================
-    conversation, created = ChatConversation.objects.get_or_create(
-        client=patient
-    )
+    # ✅ risk detection
+    risk = detect_risk(user_message)
 
-    # =========================
-    # SAVE USER MESSAGE
-    # =========================
-    ChatMessage.objects.create(
-        conversation=conversation,
-        sender="user",
-        message=user_message
-    )
-
-    # =========================
-    # GET RECENT CONVERSATION
-    # =========================
-    recent_messages = conversation.messages.order_by("-created_at")[:10]
-
-    conversation_text = " ".join(
-        [msg.message for msg in recent_messages]
-    )
-
-    # =========================
-    # RUN ML RISK PREDICTION
-    # =========================
-    risk_result = predict_chat_risk(conversation_text)
-
-    prediction = risk_result["prediction"]
-    confidence = risk_result["confidence"]
-
-    print("CHAT RISK:", prediction)
-    print("CONFIDENCE:", confidence)
-
-    # =========================
-    # GEMINI RESPONSE
-    # =========================
     prompt = SYSTEM_PROMPT + "\nUser: " + user_message
 
     try:
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=[
-                {
-                    "role": "user",
-                    "parts": [{"text": prompt}]
-                }
-            ],
-        )
+        model="gemini-3-flash-preview",
+        contents=[
+            {
+                "role": "user",
+                "parts": [{"text": prompt}]
+            }
+        ],
+    )
 
         bot_reply = response.text
 
     except Exception as e:
         print("Gemini error:", str(e))
-
         return Response({
             "reply": "I'm a bit busy right now, try again 😊",
             "risk": False
         })
 
-    # SAVE BOT MESSAGE
-    bot_message = ChatMessage.objects.create(
-        conversation=conversation,
-        sender="bot",
-        message=bot_reply
-    )
-
-    # =========================
-    # CREATE ALERTS
-    # =========================
-
-    HIGH_RISK = str(prediction).lower() == "high"
-
-    if HIGH_RISK and confidence >= 0.60:
-
+    # ✅ alerts
+    if risk:
         caregivers = patient.caregivers.all()
 
         for caregiver in caregivers:
-
-            AIAlert.objects.create(
-
+            Alert.objects.create(
                 client=patient,
-
                 caregiver=caregiver,
-
-                risk_score=round(confidence * 10, 2),
-
+                risk_score=8,
                 risk_level="HIGH",
-
-                alert_type="Emotional Distress",
-
-                trigger_source="Chatbot",
-
-                prediction="ML model detected distress from conversation",
-
-                message="Patient conversation indicates emotional distress or relapse risk.",
-
-                reasons=[conversation_text],
-
-                chat_message=bot_message
+                prediction="Distress detected from chat",
+                reasons=[user_message]
             )
-        
-    # =========================
-    # RETURN RESPONSE
-    # =========================
+
     return Response({
         "reply": bot_reply,
-        "risk": HIGH_RISK,
-        "confidence": confidence
+        "risk": risk
     })
-
-class AIAlertsView(APIView):
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        user = request.user
-
-        try:
-            staff_profile = user.staff_profile
-
-        except:
-            return Response(
-                {"error": "Not a staff user"},
-                status=400
-            )
-
-        alerts = AIAlert.objects.filter(
-            caregiver=staff_profile
-        ).order_by("-created_at")
-
-        data = []
-
-        for alert in alerts:
-
-            data.append({
-
-                "patient_name": alert.client.fullName,
-
-                "risk_level": alert.risk_level,
-
-                "risk_score": alert.risk_score,
-
-                "alert_type": alert.alert_type,
-
-                "trigger_source": alert.trigger_source,
-
-                "message": alert.message,
-
-                "created_at": alert.created_at,
-
-                "reasons": alert.reasons,
-            })
-
-        return Response(data)
