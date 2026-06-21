@@ -15,7 +15,6 @@ import PeopleIcon from "@mui/icons-material/People";
 import GroupIcon from "@mui/icons-material/Group";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import BarChartIcon from "@mui/icons-material/BarChart";
-import SettingsIcon from "@mui/icons-material/Settings";
 import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import { jwtDecode } from "jwt-decode";
@@ -156,27 +155,9 @@ function DirectorSidebar({ collapsed }) {
         {!collapsed && <ListItemText primary="Relapse Risk Monitor" />}
       </ListItemButton>
 
-      {/* Reports */}
-      <ListItemButton
-        selected={isActive("/director/reports")}
-        onClick={() => navigate("/director/reports")}
-      >
-        <ListItemIcon>
-          <BarChartIcon />
-        </ListItemIcon>
-        {!collapsed && <ListItemText primary="Reports" />}
-      </ListItemButton>
+      
 
-      {/* Settings (for all staff) */}
-      <ListItemButton
-        selected={isActive("/director/settings")}
-        onClick={() => navigate("/director/settings")}
-      >
-        <ListItemIcon>
-          <SettingsIcon />
-        </ListItemIcon>
-        {!collapsed && <ListItemText primary="Settings" />}
-      </ListItemButton>
+      
 
       {/* Admin section - only for admin role */}
       {(isAdmin || isDirector) && (
@@ -330,8 +311,8 @@ function DirectorSidebar({ collapsed }) {
         <List component="div" disablePadding>
           <ListItemButton
             sx={{ pl: 7 }}
-            selected={isActive("/director/staff")}
-            onClick={() => navigate("/director/staff")}
+            selected={isActive("/director/staff/all")}
+            onClick={() => navigate("/director/staff/all")}
           >
             <ListItemText primary="All Staff" />
           </ListItemButton>
@@ -346,38 +327,9 @@ function DirectorSidebar({ collapsed }) {
         </List>
       </Collapse>
 
-      {/* Reports */}
-      <ListItemButton
-        selected={isActive("/director/reports")}
-        onClick={() => navigate("/director/reports")}
-      >
-        <ListItemIcon>
-          <BarChartIcon />
-        </ListItemIcon>
-        {!collapsed && <ListItemText primary="Reports" />}
-      </ListItemButton>
+      
 
-      {/* Message Center */}
-      <ListItemButton
-        selected={isActive("/director/messages")}
-        onClick={() => navigate("/director/messages")}
-      >
-        <ListItemIcon>
-          <MessageIcon />
-        </ListItemIcon>
-        {!collapsed && <ListItemText primary="Message Center" />}
-      </ListItemButton>
-
-      {/* Settings */}
-      <ListItemButton
-        selected={isActive("/director/settings")}
-        onClick={() => navigate("/director/settings")}
-      >
-        <ListItemIcon>
-          <SettingsIcon />
-        </ListItemIcon>
-        {!collapsed && <ListItemText primary="Settings" />}
-      </ListItemButton>
+           
 
       {/* Admin */}
       <ListItemButton
