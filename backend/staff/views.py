@@ -108,6 +108,30 @@ class StaffDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+    def patch(self, request, pk):
+        if request.user.role not in ['director', 'admin']:
+            return Response(
+                {"error": "Permission denied"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            staff = StaffProfile.objects.get(pk=pk)
+        except StaffProfile.DoesNotExist:
+            return Response(
+                {"error": "Staff not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = StaffProfileSerializer(staff, data=request.data, partial=True)
+        if serializer.is_valid():
+            updated_staff = serializer.save()
+            if updated_staff.user and "full_name" in request.data:
+                updated_staff.user.full_name = updated_staff.full_name
+                updated_staff.user.save(update_fields=["full_name"])
+            return Response(StaffProfileSerializer(updated_staff).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class LinkStaffToUserView(APIView):
     permission_classes = [IsAuthenticated]

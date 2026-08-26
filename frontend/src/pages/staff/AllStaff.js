@@ -392,7 +392,9 @@ function AllStaff() {
                       <Tooltip title="Edit Staff">
                         <IconButton
                           color="success"
-                          onClick={() => navigate(`/staff/edit/${member.id}`)}
+                          onClick={() =>
+                            navigate(`/director/staff/edit/${member.id}`)
+                          }
                           size="small"
                           sx={{ "&:hover": { backgroundColor: "#e8f5e9" } }}
                         >
@@ -625,7 +627,9 @@ function AllStaff() {
         </DialogContent>
         <DialogActions sx={{ p: 2, backgroundColor: "#f8f9fb" }}>
           <Button
-            onClick={() => navigate(`/staff/edit/${selectedStaff?.id}`)}
+            onClick={() =>
+              navigate(`/director/staff/edit/${selectedStaff?.id}`)
+            }
             variant="contained"
             sx={{
               background: "linear-gradient(to right, #1976d2, #0d47a1)",
